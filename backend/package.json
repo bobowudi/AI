@@ -1,0 +1,26 @@
+{
+  "name": "doubao-chat-backend",
+  "version": "1.0.0",
+  "description": "豆包AI聊天应用 - 后端服务器",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node index.js"
+  },
+  "keywords": [
+    "doubao",
+    "ai",
+    "chat",
+    "backend"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "multer": "^1.4.5-lts.1",
+    "xlsx": "^0.18.5"
+  }
+}
