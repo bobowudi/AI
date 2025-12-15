@@ -19,6 +19,12 @@
         >
           🎨 图像生成
         </button>
+        <button 
+          :class="['nav-tab', { active: currentPage === 'imageEdit' }]"
+          @click="currentPage = 'imageEdit'"
+        >
+          ✏️ 图像编辑
+        </button>
         <!-- <button 
           :class="['nav-tab', { active: currentPage === 'screenshot' }]"
           @click="currentPage = 'screenshot'"
@@ -32,6 +38,7 @@
     <main class="main-content">
       <ChatBox v-if="currentPage === 'chat'" />
       <ImageGenerator v-if="currentPage === 'image'" />
+      <ImageEditor v-if="currentPage === 'imageEdit'" />
       <ScreenshotCapture v-if="currentPage === 'screenshot'" />
     </main>
   </div>
@@ -41,6 +48,7 @@
 import { ref } from 'vue'
 import ChatBox from './components/ChatBox.vue'
 import ImageGenerator from './components/ImageGenerator.vue'
+import ImageEditor from './components/ImageEditor.vue'
 import ScreenshotCapture from './components/ScreenshotCapture.vue'
 
 const currentPage = ref('chat')

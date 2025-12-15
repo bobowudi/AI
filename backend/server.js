@@ -10,6 +10,7 @@ import multer from 'multer';
 // 导入 API 模块
 import { callDoubaoWithTools, callDoubaoStream } from './api/doubao.js';
 import { generateImage } from './api/image.js';
+import { editImageByUrl, editImageByBase64, isValidImageUrl } from './api/image-edit.js';
 import { CHART_TOOLS, needsChartGeneration, generateEChartsOption } from './api/chart.js';
 import { processExcelFile } from './api/excel.js';
 import { captureScreenshot, isValidUrl } from './api/screenshot.js';
@@ -22,8 +23,9 @@ const PORT = 3000;
 // CORS 跨域支持
 app.use(cors());
 
-// JSON 解析
-app.use(express.json());
+// JSON 解析 (增加大小限制以支持图片 Base64)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // 文件上传配置 (multer)
 const storage = multer.memoryStorage();
@@ -168,6 +170,111 @@ app.post('/api/generate-image', async (req, res) => {
 });
 
 /**
+ * 图像编辑接口 (魔塔 Qwen-Image-Edit) - URL 模式
+ * POST /api/edit-image-url
+ */
+app.post('/api/edit-image-url', async (req, res) => {
+  try {
+    const { 
+      imageUrl, 
+      prompt, 
+      negativePrompt = '', 
+      steps = 50, 
+      cfgScale = 4.0,
+      seed = -1 
+    } = req.body;
+    
+    if (!imageUrl) {
+      return res.status(400).json({ 
+        success: false,
+        error: '请提供图片 URL (imageUrl)' 
+      });
+    }
+
+    if (!prompt) {
+      return res.status(400).json({ 
+        success: false,
+        error: '请提供编辑指令 (prompt)' 
+      });
+    }
+
+    if (!isValidImageUrl(imageUrl)) {
+      return res.status(400).json({ 
+        success: false,
+        error: '无效的图片 URL 格式' 
+      });
+    }
+
+    console.log('🎨 收到图片编辑请求 (URL 模式)');
+    
+    const result = await editImageByUrl(imageUrl, prompt, {
+      negativePrompt,
+      steps,
+      cfgScale,
+      seed
+    });
+    
+    res.json(result);
+
+  } catch (error) {
+    console.error('❌ 编辑图像失败:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+/**
+ * 图像编辑接口 (魔塔 Qwen-Image-Edit) - Base64 模式
+ * POST /api/edit-image-base64
+ */
+app.post('/api/edit-image-base64', async (req, res) => {
+  try {
+    const { 
+      base64Image, 
+      prompt, 
+      negativePrompt = '', 
+      steps = 50, 
+      cfgScale = 4.0,
+      seed = -1 
+    } = req.body;
+    
+    if (!base64Image) {
+      return res.status(400).json({ 
+        success: false,
+        error: '请提供 Base64 图片数据 (base64Image)' 
+      });
+    }
+
+    if (!prompt) {
+      return res.status(400).json({ 
+        success: false,
+        error: '请提供编辑指令 (prompt)' 
+      });
+    }
+
+    console.log('🎨 收到图片编辑请求 (Base64 模式)');
+    
+    const result = await editImageByBase64(base64Image, prompt, {
+      negativePrompt,
+      steps,
+      cfgScale,
+      seed
+    });
+    
+    res.json(result);
+
+  } catch (error) {
+    console.error('❌ 编辑图像失败:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+/**
  * Excel 文件上传和分析接口
  * POST /api/upload-excel
  */
@@ -257,6 +364,7 @@ app.get('/api/health', (req, res) => {
     services: {
       chat: 'available',
       image: 'available',
+      imageEdit: 'available',
       excel: 'available',
       screenshot: 'available'
     }
@@ -275,7 +383,9 @@ app.listen(PORT, () => {
 ║                                                            ║
 ║   📋 API 端点:                                              ║
 ║      💬 聊天: POST /api/chat                                ║
-║      🎨 图像: POST /api/generate-image                      ║
+║      🎨 图像生成: POST /api/generate-image                  ║
+║      ✏️  图像编辑: POST /api/edit-image-url                 ║
+║      ✏️  图像编辑: POST /api/edit-image-base64              ║
 ║      📸 截图: POST /api/screenshot                          ║
 ║      📊 Excel: POST /api/upload-excel                       ║
 ║      ❤️  健康: GET /api/health                              ║
