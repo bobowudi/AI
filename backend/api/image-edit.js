@@ -1,13 +1,14 @@
 /**
- * 魔塔 Qwen-Image-Edit 图像编辑 API 模块
+ * 阿里云百炼 Qwen-Image-Edit 图像编辑 API 模块
  * 提供 AI 图像编辑功能
  */
 
-// 魔塔 Qwen-Image-Edit 配置
+
+// 阿里云百炼 Qwen-Image-Edit 配置
 export const IMAGE_EDIT_CONFIG = {
-  baseUrl: 'https://api-inference.modelscope.cn/v1/images/generations',  // 注意: 图像编辑也使用 generations 端点
-  apiKey: 'ms-ba6fc3a2-020a-479f-8196-531af11db279',  // ModelScope API Key (复用 image.js 的)
-  model: 'Qwen/Qwen-Image-Edit'
+  baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
+  apiKey: 'sk-385eff51de9044d7ab101bb7eed2e50a',  // 阿里云百炼 API Key
+  model: 'qwen-image-edit-plus'
 };
 
 /**
@@ -24,65 +25,75 @@ export const IMAGE_EDIT_CONFIG = {
 export async function editImageByUrl(imageUrl, prompt, options = {}) {
   const {
     negativePrompt = '',
-    steps = 50,
-    cfgScale = 4.0,
-    seed = -1
+    n = 1,  // 生成图片数量
+    promptExtend = true,  // 提示词扩展
+    watermark = false  // 水印
   } = options;
 
   try {
-    console.log('🎨 调用魔塔图片编辑 API...');
+    console.log('🎨 调用阿里云百炼图片编辑 API...');
     console.log('📸 图片 URL:', imageUrl);
     console.log('✏️  编辑指令:', prompt);
 
-    // 根据魔塔 API 文档,需要使用 data:image 格式的 URL 或 Base64
-    // 对于 URL 模式,直接传入 URL 字符串
+    // 构建阿里云百炼 API 请求体
     const requestBody = {
       model: IMAGE_EDIT_CONFIG.model,
-      prompt: prompt,
-      image: imageUrl,  // 直接传入 URL
-      negative_prompt: negativePrompt,
-      size: '1024x1024'  // 添加默认尺寸
+      input: {
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                image: imageUrl  // 图片 URL
+              },
+              {
+                text: prompt  // 编辑指令
+              }
+            ]
+          }
+        ]
+      },
+      parameters: {
+        n: n,
+        watermark: watermark,
+        prompt_extend: promptExtend
+      }
     };
 
-    // 如果指定了 seed，添加到请求中
-    if (seed >= 0) {
-      requestBody.seed = seed;
+    // 只在有值时添加负面提示词
+    if (negativePrompt) {
+      requestBody.parameters.negative_prompt = negativePrompt;
     }
-    
-    // 添加高级参数到 extra_body (如果 API 支持)
-    if (steps !== 50 || cfgScale !== 4.0) {
-      requestBody.extra_body = {
-        num_inference_steps: steps,
-        true_cfg_scale: cfgScale
-      };
-    }
+
+    console.log('📤 发送请求到阿里云百炼 API...');
 
     const response = await fetch(IMAGE_EDIT_CONFIG.baseUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${IMAGE_EDIT_CONFIG.apiKey}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ 魔塔 API 错误:', errorText);
+      console.error('❌ 阿里云百炼 API 错误:', errorText);
       throw new Error(`API 请求失败: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
     console.log('📦 API 返回数据:', JSON.stringify(data, null, 2));
 
-    // 从 API 响应中提取图像 URL (可能是 images[0].url 或 data[0].url)
+    // 从阿里云百炼 API 响应中提取图像 URL
+    // 响应格式: output.choices[0].message.content[0].image
     let editedImageUrl = null;
     
-    if (data.images && data.images[0]) {
-      editedImageUrl = data.images[0].url;
-    } else if (data.data && data.data[0]) {
-      // 有些 API 返回格式可能是 data 数组
-      editedImageUrl = data.data[0].url;
+    if (data.output && data.output.choices && data.output.choices[0]) {
+      const content = data.output.choices[0].message?.content;
+      if (Array.isArray(content) && content[0]?.image) {
+        editedImageUrl = content[0].image;
+      }
     }
     
     if (!editedImageUrl) {
@@ -96,9 +107,9 @@ export async function editImageByUrl(imageUrl, prompt, options = {}) {
       prompt: prompt,
       options: {
         negativePrompt,
-        steps,
-        cfgScale,
-        seed: data.seed || seed
+        n,
+        promptExtend,
+        watermark
       }
     };
   } catch (error) {
@@ -117,65 +128,78 @@ export async function editImageByUrl(imageUrl, prompt, options = {}) {
 export async function editImageByBase64(base64Image, prompt, options = {}) {
   const {
     negativePrompt = '',
-    steps = 50,
-    cfgScale = 4.0,
-    seed = -1
+    n = 1,
+    promptExtend = true,
+    watermark = false
   } = options;
 
   try {
-    console.log('🎨 调用魔塔图片编辑 API (Base64 模式)...');
+    console.log('🎨 调用阿里云百炼图片编辑 API (Base64 模式)...');
     console.log('✏️  编辑指令:', prompt);
 
-    // 确保 Base64 字符串格式正确
+    // 确保 Base64 字符串格式正确（阿里云支持 data URI 格式）
     const imageData = base64Image.startsWith('data:') 
       ? base64Image 
       : `data:image/jpeg;base64,${base64Image}`;
 
+    // 构建阿里云百炼 API 请求体
     const requestBody = {
       model: IMAGE_EDIT_CONFIG.model,
-      prompt: prompt,
-      image: imageData,
-      negative_prompt: negativePrompt,
-      size: '1024x1024'
+      input: {
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                image: imageData  // Base64 图片
+              },
+              {
+                text: prompt  // 编辑指令
+              }
+            ]
+          }
+        ]
+      },
+      parameters: {
+        n: n,
+        watermark: watermark,
+        prompt_extend: promptExtend
+      }
     };
 
-    if (seed >= 0) {
-      requestBody.seed = seed;
+    // 只在有值时添加负面提示词
+    if (negativePrompt) {
+      requestBody.parameters.negative_prompt = negativePrompt;
     }
-    
-    // 添加高级参数到 extra_body
-    if (steps !== 50 || cfgScale !== 4.0) {
-      requestBody.extra_body = {
-        num_inference_steps: steps,
-        true_cfg_scale: cfgScale
-      };
-    }
+
+    console.log('📤 发送请求到阿里云百炼 API...');
 
     const response = await fetch(IMAGE_EDIT_CONFIG.baseUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${IMAGE_EDIT_CONFIG.apiKey}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ 魔塔 API 错误:', errorText);
+      console.error('❌ 阿里云百炼 API 错误:', errorText);
       throw new Error(`API 请求失败: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
     console.log('📦 API 返回数据:', JSON.stringify(data, null, 2));
 
-    // 从 API 响应中提取图像 URL
+    // 从阿里云百炼 API 响应中提取图像 URL
     let editedImageUrl = null;
     
-    if (data.images && data.images[0]) {
-      editedImageUrl = data.images[0].url;
-    } else if (data.data && data.data[0]) {
-      editedImageUrl = data.data[0].url;
+    if (data.output && data.output.choices && data.output.choices[0]) {
+      const content = data.output.choices[0].message?.content;
+      if (Array.isArray(content) && content[0]?.image) {
+        editedImageUrl = content[0].image;
+      }
     }
     
     if (!editedImageUrl) {
@@ -188,9 +212,9 @@ export async function editImageByBase64(base64Image, prompt, options = {}) {
       prompt: prompt,
       options: {
         negativePrompt,
-        steps,
-        cfgScale,
-        seed: data.seed || seed
+        n,
+        promptExtend,
+        watermark
       }
     };
   } catch (error) {
